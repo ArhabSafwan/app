@@ -1,61 +1,102 @@
-'use client'; // 1. TURN INTO CLIENT COMPONENT
-/**
- * In Next.js, 'use client' is like adding an 'EventListener' in vanilla JS.
- * By default, pages are static HTML (Server Components). 
- * Adding this allows us to use Hooks like 'useState' and handle clicks.
- */
+'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
+const API_BASE_URL = 'http://localhost:8000/api';
+
+interface Task {
+  id: number;
+  title: string;
+  status: 'Todo' | 'In Progress' | 'Done';
+}
 
 export default function KanbanPage() {
-  /**
-   * 2. REACT STATE (Laravel Analogy: Session or a Collection in Memory)
-   * 
-   * In Laravel, to keep data between clicks, you'd save it to a Database or Session.
-   * In Next.js, 'useState' creates a variable that React "watches".
-   * If you update 'tasks', React automatically re-renders the HTML.
-   */
-  const [tasks, setTasks] = useState([
-    { id: 1, title: 'Learn Next.js Routing', status: 'Todo' },
-    { id: 2, title: 'Setup Kanban Board', status: 'In Progress' },
-    { id: 3, title: 'Understand Server Components', status: 'Todo' },
-    { id: 4, title: 'Master JSX Basics', status: 'Done' },
-    { id: 5, title: 'Object Destructuring', status: 'In Progress' },
-  ]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const columns: Task['status'][] = ['Todo', 'In Progress', 'Done'];
 
-  const columns = ['Todo', 'In Progress', 'Done'];
+  useEffect(() => {
+    fetchTasks();
+  }, []);
 
-  /**
-   * 3. UPDATE TASK STATUS (Laravel Analogy: $collection->map())
-   * 
-   * We use the Spread Operator (...) to copy the task and change only the status.
-   */
-  const markAsDone = (taskId: number) => {
-    const updatedTasks = tasks.map((task) => {
-      if (task.id === taskId) {
-        // Return a copy of the task with status changed to 'Done'
-        return { ...task, status: 'Done' };
-      }
-      return task; // Leave other tasks alone
-    });
-    setTasks(updatedTasks);
+  const fetchTasks = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/tasks`);
+      const data = await response.json();
+      setTasks(data);
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+    }
   };
 
-  /**
-   * 4. DELETE TASK (Laravel Analogy: $collection->reject() or forget())
-   * 
-   * We use .filter() to create a new array WITHOUT the deleted task.
-   */
-  const deleteTask = (taskId: number) => {
-    const filteredTasks = tasks.filter((task) => task.id !== taskId);
-    setTasks(filteredTasks);
+  const createTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim()) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newTaskTitle, status: 'Todo' }),
+      });
+      if (response.ok) {
+        setNewTaskTitle('');
+        fetchTasks();
+      }
+    } catch (error) {
+      console.error('Error creating task:', error);
+    }
+  };
+
+  const updateTaskStatus = async (taskId: number, newStatus: Task['status']) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (response.ok) {
+        fetchTasks();
+      }
+    } catch (error) {
+      console.error('Error updating task:', error);
+    }
+  };
+
+  const deleteTask = async (taskId: number) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/tasks/${taskId}`, {
+        method: 'DELETE',
+      });
+      if (response.ok) {
+        fetchTasks();
+      }
+    } catch (error) {
+      console.error('Error deleting task:', error);
+    }
   };
 
   return (
     <div className="p-8 max-w-6xl mx-auto min-h-screen bg-gray-50">
-      <h1 className="text-4xl font-extrabold mb-10 text-gray-900 tracking-tight">
+      <h1 className="text-4xl font-extrabold mb-6 text-gray-900 tracking-tight">
         Vibe Kanban <span className="text-blue-600">Board</span>
       </h1>
+
+      <form onSubmit={createTask} className="mb-10 flex gap-2">
+        <input
+          type="text"
+          value={newTaskTitle}
+          onChange={(e) => setNewTaskTitle(e.target.value)}
+          placeholder="What needs to be done?"
+          className="flex-1 p-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+        />
+        <button
+          type="submit"
+          className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors shadow-md"
+        >
+          Add Task
+        </button>
+      </form>
       
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         {columns.map((column) => (
@@ -80,18 +121,24 @@ export default function KanbanPage() {
                     </p>
                     
                     <div className="flex gap-2">
-                      {/* CHECKMARK BUTTON */}
-                      {column !== 'Done' && (
+                      {column === 'Todo' && (
                         <button 
-                          onClick={() => markAsDone(id)}
-                          className="flex-1 bg-green-50 text-green-600 hover:bg-green-600 hover:text-white border border-green-200 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center"
-                          title="Mark as Done"
+                          onClick={() => updateTaskStatus(id, 'In Progress')}
+                          className="flex-1 bg-yellow-50 text-yellow-600 hover:bg-yellow-600 hover:text-white border border-yellow-200 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center"
                         >
-                          ✓ Done
+                          Start
+                        </button>
+                      )}
+                      
+                      {column === 'In Progress' && (
+                        <button 
+                          onClick={() => updateTaskStatus(id, 'Done')}
+                          className="flex-1 bg-green-50 text-green-600 hover:bg-green-600 hover:text-white border border-green-200 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center"
+                        >
+                          Finish
                         </button>
                       )}
 
-                      {/* DELETE BUTTON */}
                       <button 
                         onClick={() => deleteTask(id)}
                         className="p-1.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border border-red-200 rounded-lg transition-all"
